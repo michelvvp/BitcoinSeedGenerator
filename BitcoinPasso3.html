@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>BIP32 - Master Key</title>
+</head>
+<body>
+  <h3>BIP32 – Master Private Key</h3>
+
+  <label>Seed (hex –   64 bytes):</label><br>
+  <textarea id="seed" rows="4" cols="90"
+    placeholder="Cole aqui o resultado do PBKDF2 (hex)"></textarea>
+  <br><br>
+
+  <button onclick="gerar()">Gerar Master Key</button>
+
+  <pre id="output"></pre>
+
+  <script>
+    function hexToBytes(hex) {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+      return bytes;
+    }
+
+    function bytesToHex(bytes) {
+      return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+
+    async function gerar() {
+      const seedHex = document.getElementById("seed").value.trim();
+
+      if (seedHex.length !== 128) {
+        alert("Seed inválida: precisa ter 128 caracteres hex (64 bytes)");
+        return;
+      }
+
+      const seedBytes = hexToBytes(seedHex);
+
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode("Bitcoin seed"),
+        { name: "HMAC", hash: "SHA-512" },
+        false,
+        ["sign"]
+      );
+
+      const signature = await crypto.subtle.sign("HMAC", key, seedBytes);
+      const result = new Uint8Array(signature);
+
+      const IL = result.slice(0, 32);
+      const IR = result.slice(32);
+
+      document.getElementById("output").textContent =
+        "Master Private Key (IL):\n" + bytesToHex(IL) +
+        "\n\nChain Code (IR):\n" + bytesToHex(IR);
+    }
+  </script>
+</body>
+</html>
