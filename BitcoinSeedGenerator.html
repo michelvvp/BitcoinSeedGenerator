@@ -37,7 +37,7 @@
 
     button {
       background-color: #4CAF50;
-      color: white;
+      color: #222;
       border: none;
       cursor: pointer;
     }
@@ -64,6 +64,43 @@
       font-weight: bold;
       display: none;
     }
+
+    #pbkdf2-section {
+      margin-top: 20px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      display: none;
+    }
+
+    #pbkdf2-section h3 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    #pbkdf2-section input {
+      padding: 8px 12px;
+      font-size: 15px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      width: calc(100% - 26px);
+      margin-bottom: 10px;
+    }
+
+    #pbkdf2-output {
+      margin-top: 10px;
+      background: #f7f7f7;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.85em;
+      word-break: break-all;
+      white-space: pre-wrap;
+      color: #222;
+    }
   </style>
 </head>
 
@@ -84,6 +121,13 @@
 
   <div id="seed">Your seed will appear here.</div>
   <div id="copiedMsg">Copied!</div>
+
+  <div id="pbkdf2-section">
+    <h3>BIP39 PBKDF2 — Mnemonic → Seed (512 bits)</h3>
+    <input id="passphrase" placeholder="Passphrase (opcional)" />
+    <button onclick="generatePBKDF2Seed()">Gerar seed PBKDF2</button>
+    <div id="pbkdf2-output"></div>
+  </div>
 
   <script>
     let wordlist = [];
@@ -137,6 +181,42 @@
 
       document.getElementById('seed').innerText = words.join(' ');
       document.getElementById('copiedMsg').style.display = 'none';
+      document.getElementById('pbkdf2-section').style.display = 'block';
+    }
+
+    async function generatePBKDF2Seed() {
+      const mnemonic = document.getElementById('seed').innerText.trim();
+      if (!mnemonic || mnemonic === 'Your seed will appear here.') return;
+
+      const passphrase = (document.getElementById('passphrase').value || '').normalize('NFKD');
+      const passwordBytes = new TextEncoder().encode(mnemonic.normalize('NFKD'));
+      const saltBytes = new TextEncoder().encode('mnemonic' + passphrase);
+
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        passwordBytes,
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits']
+      );
+
+      const derivedBits = await crypto.subtle.deriveBits(
+        {
+          name: 'PBKDF2',
+          salt: saltBytes,
+          iterations: 2048,
+          hash: 'SHA-512'
+        },
+        keyMaterial,
+        512
+      );
+
+      const seedHex = Array.from(new Uint8Array(derivedBits))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      document.getElementById('pbkdf2-output').textContent =
+        'Seed (512 bits / 64 bytes):\n' + seedHex;
     }
 
     function copySeed() {
