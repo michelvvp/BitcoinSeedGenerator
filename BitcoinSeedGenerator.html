@@ -101,6 +101,34 @@
       white-space: pre-wrap;
       color: #222;
     }
+
+    #bip32-section {
+      margin-top: 20px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      display: none;
+    }
+
+    #bip32-section h3 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    #bip32-output {
+      margin-top: 10px;
+      background: #f7f7f7;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.85em;
+      word-break: break-all;
+      white-space: pre-wrap;
+      color: #222;
+    }
   </style>
 </head>
 
@@ -127,6 +155,11 @@
     <input id="passphrase" placeholder="Passphrase (opcional)" />
     <button onclick="generatePBKDF2Seed()">Gerar seed PBKDF2</button>
     <div id="pbkdf2-output"></div>
+  </div>
+
+  <div id="bip32-section">
+    <h3>BIP32 — Master Private Key</h3>
+    <div id="bip32-output"></div>
   </div>
 
   <script>
@@ -217,6 +250,47 @@
 
       document.getElementById('pbkdf2-output').textContent =
         'Seed (512 bits / 64 bytes):\n' + seedHex;
+
+      document.getElementById('bip32-section').style.display = 'block';
+      await gerarMasterKey(seedHex);
+    }
+
+    function hexToBytes(hex) {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+      return bytes;
+    }
+
+    function bytesToHex(bytes) {
+      return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    }
+
+    async function gerarMasterKey(seedHex) {
+      if (!seedHex || seedHex.length !== 128) return;
+
+      const seedBytes = hexToBytes(seedHex);
+
+      const key = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode('Bitcoin seed'),
+        { name: 'HMAC', hash: 'SHA-512' },
+        false,
+        ['sign']
+      );
+
+      const signature = await crypto.subtle.sign('HMAC', key, seedBytes);
+      const result = new Uint8Array(signature);
+
+      const IL = result.slice(0, 32);
+      const IR = result.slice(32);
+
+      document.getElementById('bip32-output').textContent =
+        'Master Private Key (IL):\n' + bytesToHex(IL) +
+        '\n\nChain Code (IR):\n' + bytesToHex(IR);
     }
 
     function copySeed() {
