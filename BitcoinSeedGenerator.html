@@ -58,6 +58,10 @@
       word-wrap: break-word;
     }
 
+    #seed:focus {
+      outline: 2px solid #4CAF50;
+    }
+
     #copiedMsg {
       margin-top: 10px;
       color: #4CAF50;
@@ -129,6 +133,22 @@
       white-space: pre-wrap;
       color: #222;
     }
+
+    #bits-panel {
+      margin-top: 20px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    #bits-output {
+      font-family: monospace;
+      font-size: 0.85em;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 
@@ -147,7 +167,12 @@
     <button onclick="copySeed()">Copy Seed</button>
   </div>
 
-  <div id="seed">Your seed will appear here.</div>
+  <div id="seed" contenteditable="true" spellcheck="false">Your seed will appear here.</div>
+
+  <div id="bits-panel">
+    <h3>Bits de cada palavra</h3>
+    <div id="bits-output"></div>
+  </div>
   <div id="copiedMsg">Copied!</div>
 
   <div id="pbkdf2-section">
@@ -178,6 +203,10 @@
       return bytes.map(b => toBinaryStr(b, 8)).join('');
     }
 
+    function normalizeSeedText(text) {
+      return (text || '').replace(/\s+/g, ' ').trim();
+    }
+
     async function sha256(buffer) {
       const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -190,6 +219,7 @@
       }
 
       const wordCount = parseInt(document.getElementById('wordCount').value);
+
       const entropyBitsLength = {
         12: 128,
         15: 160,
@@ -202,23 +232,47 @@
       const byteCount = entropyBitsLength / 8;
 
       const entropy = crypto.getRandomValues(new Uint8Array(byteCount));
+
       const entropyBits = bytesToBinary(Array.from(entropy));
-      const checksumBits = (await sha256(entropy.buffer)).substring(0, checksumLength);
+
+      const checksumFull = await sha256(entropy.buffer);
+      const checksumBits = checksumFull.substring(0, checksumLength);
 
       const bits = entropyBits + checksumBits;
+
       const words = [];
+      const bitsOutput = [];
+
       for (let i = 0; i < bits.length; i += 11) {
-        const index = parseInt(bits.substring(i, i + 11), 2);
-        words.push(wordlist[index]);
+
+        const chunk = bits.substring(i, i + 11);
+        const index = parseInt(chunk, 2);
+        const word = wordlist[index];
+
+        words.push(word);
+
+        bitsOutput.push(
+          word.padEnd(10) + "  " +
+          chunk + "  (" + index + ")"
+        );
       }
 
       document.getElementById('seed').innerText = words.join(' ');
+
+      document.getElementById('bits-output').textContent =
+        "Entropy bits:\n" +
+        entropyBits +
+        "\n\nChecksum bits:\n" +
+        checksumBits +
+        "\n\nPalavra → 11 bits:\n\n" +
+        bitsOutput.join("\n");
+
       document.getElementById('copiedMsg').style.display = 'none';
       document.getElementById('pbkdf2-section').style.display = 'block';
     }
 
     async function generatePBKDF2Seed() {
-      const mnemonic = document.getElementById('seed').innerText.trim();
+      const mnemonic = normalizeSeedText(document.getElementById('seed').innerText);
       if (!mnemonic || mnemonic === 'Your seed will appear here.') return;
 
       const passphrase = (document.getElementById('passphrase').value || '').normalize('NFKD');
@@ -293,8 +347,24 @@
         '\n\nChain Code (IR):\n' + bytesToHex(IR);
     }
 
+    async function handleSeedChange() {
+      const seedText = normalizeSeedText(document.getElementById('seed').innerText);
+
+      if (!seedText || seedText === 'Your seed will appear here.') {
+        document.getElementById('pbkdf2-section').style.display = 'none';
+        document.getElementById('bip32-section').style.display = 'none';
+        document.getElementById('pbkdf2-output').textContent = '';
+        document.getElementById('bip32-output').textContent = '';
+        return;
+      }
+
+      document.getElementById('seed').innerText = seedText;
+      document.getElementById('pbkdf2-section').style.display = 'block';
+      await generatePBKDF2Seed();
+    }
+
     function copySeed() {
-      const seedText = document.getElementById('seed').innerText;
+      const seedText = normalizeSeedText(document.getElementById('seed').innerText);
       if (seedText && seedText !== "Your seed will appear here.") {
         navigator.clipboard.writeText(seedText).then(() => {
           const msg = document.getElementById('copiedMsg');
@@ -305,6 +375,10 @@
         });
       }
     }
+
+    document.getElementById('seed').addEventListener('input', () => {
+      handleSeedChange();
+    });
   </script>
 </body>
 
